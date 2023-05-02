@@ -1,0 +1,158 @@
+- name: Initialize web-website1
+  hosts: web-website1
+  become: yes
+  become_user: root
+  vars:
+   web: "{{ groups['web-website1'] }}"
+  tasks:
+   - name: Add PHP7.2 repository
+     apt_repository:
+      repo: ppa:ondrej/php
+      state: present
+   - name: Install webserver
+     register: updatesys
+     apt:
+      update_cache: yes
+      name:
+       - apache2
+       - php7.2
+      state: present
+   - name: Install modules
+     register: updatesys
+     apt:
+      update_cache: yes
+      name:
+       - php7.2-common
+       - php7.2-cli
+       - php7.2-cgi
+       - php7.2-mysql
+       - php7.2-json
+       - php7.2-opcache
+       - php7.2-curl
+       - php7.2-ldap
+       - php7.2-gd
+       - php7.2-imap
+       - php7.2-mbstring
+       - php7.2-intl
+       - php7.2-apcu
+       - php7.2-xml
+       - php7.2-fpm
+       - php7.2-zip
+       - php7.2-imagick
+       - php7.2-apcu-bc
+       - php7.2-gettext
+       - php7.2-xdebug
+       - libapache2-mod-php7.2
+       - ghostscript
+       - python3-certbot-apache
+       - certbot
+       - clamav
+       - clamav-daemon
+      state: present
+   - name: Enable ssl module
+     apache2_module:
+      state: present
+      name: ssl
+   - name: Enable rewrite module
+     apache2_module:
+      state: present
+      name: rewrite
+   - name: Enable headers module
+     apache2_module:
+      state: present
+      name: headers
+   - name: Create /var/www/website1 folder
+     command: mkdir -p /var/www/website1
+   - name: Clone code from Git
+     git:
+      repo: git@gitlab.com:it-division1/website1.git
+      version: main
+      dest: /var/www/website1 
+      accept_hostkey: yes
+      update: yes
+      force: yes
+   - name: Copy http configuration
+     template:
+      src: ../../overlays_templates/web/website1/0-website1.conf
+      dest: /etc/apache2/sites-available/0-website1.conf
+   - name: Copy https configuration
+     template:
+      src: ../../overlays_templates/web/website1/0-website1-ssl.conf
+      dest: /etc/apache2/sites-available/0-website1-ssl.conf
+   - name: Enable site
+     shell: "{{ item }}"
+     with_items:
+      - "a2ensite 0-website1.conf"
+      - "a2ensite 0-website1-ssl.conf"
+#      - "a2dissite 000-default.conf"
+   - name: Copy LDAP configuration
+     template:
+      src: ../../overlays_templates/web/website1/ldap.conf
+      dest: /etc/ldap/ldap.conf
+   - name: Fix permissions
+     shell: "{{ item }}"
+     with_items:
+      - "find /var/www/website1 -type d -print0 | xargs -0 chmod 0755"
+      - "find /var/www/website1 -type f -print0 | xargs -0 chmod 0644"
+      - "chown -R www-data:www-data /var/www/website1"
+   - name: Create data folder
+     file:
+      path: /var/www/website1_data
+      state: directory
+      mode: 0755
+      owner: www-data
+      group: www-data
+   - name: Create pdf folder
+     file:
+      path: /var/www/website1_data/pdf
+      state: directory
+      mode: 0755
+      owner: www-data
+      group: www-data
+   - name: Create pages folder
+     file:
+      path: /var/www/website1_data/pages
+      state: directory
+      mode: 0755
+      owner: www-data
+      group: www-data
+   - name: Create pages symlink
+     command: ln -s /var/www/website1_data/pages /var/www/website1/viewer/pages
+   - name: Set php upload_max_filesize
+     become: true
+     lineinfile:
+      dest: /etc/php/7.2/apache2/php.ini
+      regexp: "upload_max_filesize ="
+      line: "upload_max_filesize = 50M"
+   - name: Enable php ldap
+     become: true
+     lineinfile:
+      dest: /etc/php/7.2/apache2/php.ini
+      regexp: ";extension=ldap"
+      line: "extension=ldap"
+   - name: Enable php cookie secure
+     become: true
+     lineinfile:
+      dest: /etc/php/7.2/apache2/php.ini
+      regexp: ";session.cookie_secure ="
+      line: "session.cookie_secure = 1"
+   - name: Restart apache2
+     service:
+      name: apache2
+      state: restarted
+   - name: Restart clamav
+     service:
+      name: clamav-freshclam
+      state: stopped
+   - name: Update freshclam
+     command: freshclam
+   - name: Restart clamav-freshclam
+     service:
+      name: clamav-freshclam
+   - name: Restart clamav-daemon
+     service:
+      name: clamav-daemon
+   - name: Add clamav to www-data              
+     command: "usermod -aG www-data clamav"
+#   - name: Reinstall certificate
+#     shell: "certbot -d {{ domain }} --agree-tos --email admin@gmail.com --redirect --apache --reinstall --non-interactive"

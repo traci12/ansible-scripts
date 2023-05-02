@@ -1,0 +1,89 @@
+- name: Initialize db-website1
+  hosts: db-website1
+  become: yes
+  become_user: root
+  vars:
+   db: "{{ groups['website1db'] }}"
+   dbhost: "{{ groups['website1webhost'] }}"
+   mysql_root_password: "{{ groups['website1rootpassword'] }}"  
+   dbname: "{{ groups['website1dbname'] }}"
+   dbuser: "{{ groups['website1dbuser'] }}"
+   dbpassword: "{{ groups['website1dbpassword'] }}"
+   dbsql: "{{ groups['website1sql'] }}"
+  tasks:
+   - name: Install ansible python3 mysql dependency
+     apt:
+      update_cache: yes
+      name: python3-mysqldb
+      state: present
+   - name: Install db packages on remote
+     register: updatesys
+     apt:
+      update_cache: yes
+      name: mysql-server
+      state: present
+   - name: Copy mysqld configuration
+     template:
+      src: ../../overlays_templates/db/website1/etc/mysql/mysql.conf.d/mysqld.cnf
+      dest: /etc/mysql/mysql.conf.d/mysqld.cnf
+   - name: start up the mysql service  
+     shell: "service mysql start"  
+   - name: ensure mysql is enabled to run on startup  
+     service: name=mysql state=started enabled=true
+   - name: update mysql root password for all root accounts
+     mysql_user:  
+      name: root  
+      host: "{{ item }}"  
+      password: '{{ ",".join(mysql_root_password) }}'
+      login_user: root  
+      login_password: '{{ ",".join(mysql_root_password) }}'
+      check_implicit_admin: yes  
+      priv: "*.*:ALL,GRANT"  
+     with_items:  
+     - '{{ ",".join(db) }}'  
+     - 127.0.0.1  
+     - ::1  
+     - localhost
+   - name: Change the authentication plugin of MySQL root user to mysql_native_password
+     shell: mysql -u root -p{{ ",".join(mysql_root_password) }} -e 'UPDATE mysql.user SET plugin="mysql_native_password" WHERE user="{{ ",".join(dbuser) }}" AND host="{{ ",".join(db) }}"'
+   - name: Flush Privileges
+     shell: mysql -u root -p{{ ",".join(mysql_root_password) }} -e 'FLUSH PRIVILEGES'
+   - name: Delete database
+     mysql_db:
+      name={{ ",".join(dbname) }}
+      state=absent
+      login_user=root
+      login_password='{{ ",".join(mysql_root_password) }}'
+   - name: create a new database  
+     mysql_db: 
+      name={{ ",".join(dbname) }}
+      state=present 
+      login_user=root 
+      login_password='{{ ",".join(mysql_root_password) }}'
+   - name: Get db schema from Backup
+     shell: "rsync -ravP syncsystem@192.168.0.128:/backups/website1/sql/ilcweb_daily.sql /home/ilcadmin/website1_daily.sql"
+   - name: insert data into database  
+     mysql_db: 
+      name={{ ",".join(dbname) }} 
+      state=import 
+      target={{ ",".join(dbsql) }}
+      login_user=root 
+      login_password='{{ ",".join(mysql_root_password) }}'
+   - name: create new mysql user
+     mysql_user:
+      name: '{{ ",".join(dbuser) }}'
+      host: "{{ item }}"
+      password: '{{ ",".join(dbpassword) }}'
+      priv: '{{ ",".join(dbname) }}.*:ALL,GRANT'
+      login_user: root
+      login_password: '{{ ",".join(mysql_root_password) }}'
+      check_implicit_admin: yes
+     with_items:
+     - '{{ ",".join(dbhost) }}'
+     - 127.0.0.1
+     - ::1
+     - localhost
+   - name: Restart mysql
+     service:
+      name: mysql
+      state: restarted

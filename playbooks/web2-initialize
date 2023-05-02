@@ -1,0 +1,94 @@
+- name: Initialize website2
+  hosts: website2
+  become: yes
+  become_user: root
+  vars:
+   web: "{{ groups['website2'] }}"
+   db: "{{ groups['db'] }}"
+   db_root_password: "{{ groups['rootpassword'] }}"
+   dbname: "{{ groups['dbname'] }}"
+   dbuser: "{{ groups['dbuser'] }}"
+   dbpassword: "{{ groups['dbpassword'] }}"
+  tasks:
+   - name: Add Postgres 13 repository
+     shell: "{{ item }}"
+     with_items:
+      - "apt -y install vim bash-completion wget"
+      - "wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -"
+      - echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" | tee  /etc/apt/sources.list.d/pgdg.list
+   - name: Install LEMP packages on remote
+     register: updatesys
+     apt:
+      update_cache: yes
+      name:
+       - postgresql-13
+       - postgresql-client-13
+       - php7.4-pgsql
+      state: present
+   - name: Install needed packages
+     register: updatesys
+     apt:
+      update_cache: yes
+      name:
+        - pip
+        - ghostscript
+        - unoconv
+        - nginx
+        - php7.4-fpm
+        - php7.4-cli
+        - php7.4-curl
+        - php7.4-json
+        - php7.4-iconv
+        - php7.4-mbstring
+        - php7.4-xmlrpc
+        - php7.4-soap
+        - php7.4-ctype
+        - php7.4-zip
+        - php7.4-gd
+        - php7.4-dom
+        - php7.4-xml
+        - php7.4-intl
+        - php7.4-ldap
+        - apparmor-utils
+        - unzip
+      state: present
+   - name: Create /var/www folder
+     command: mkdir -p /var/www
+   - name: extract moodle4.1 archive
+     ansible.builtin.unarchive:
+      src: "https://github.com/moodle/moodle/archive/refs/tags/v4.1.2.zip"
+      dest: "/var/www"
+      remote_src: true
+      validate_certs: true
+   - name: rename file or directory
+     shell: "mv /var/www/moodle-4.1.2 /var/www/website2"
+   - name: Create data folder
+     file:
+      path: /var/www/website2_data
+      state: directory
+      mode: 0777
+      owner: www-data
+      group: www-data
+   - name: Copy http configuration
+     template:
+      src: ../../overlays_templates/web/website2/website2.conf
+      dest: /etc/nginx/sites-enabled/website2.conf
+   - name: Copy config.php
+     template:
+      src: ../../overlays_templates/web/website2/config.php
+      dest: /var/www/website2/config.php
+   - name: Restart php7.4-fpm
+     service:
+      name: php7.4-fpm
+      state: restarted
+   - name: Fix permissions
+     shell: "{{ item }}"
+     with_items:
+      - "find /var/www/website2 -type d -print0 | xargs -0 chmod 0755"
+      - "find /var/www/website2 -type f -print0 | xargs -0 chmod 0644"
+      - "chmod -R 0777 /var/www/website2_data"
+      - "chown -R www-data:www-data /var/www/website2_data"
+   - name: Restart nginx
+     service:
+      name: nginx
+      state: restarted

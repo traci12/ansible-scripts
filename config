@@ -1,0 +1,19 @@
+Host *
+    Port 22
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+
+Host bastion
+    HostName 10.x.x.1
+    User ubuntu
+    IdentityFile ~/.ssh/ubuntu
+
+Host 192.x.x.2
+    ProxyJump website
+
+Host website
+    HostName 10.x.x.2
+    User ubuntu
+    IdentityFile ~/.ssh/ubuntu	

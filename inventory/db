@@ -1,0 +1,22 @@
+##ssh bastion
+[db-website]
+server-c ansible_host=192.x.x.2 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ubuntu
+[db-website:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q website"'
+[websitedb]
+192.x.x.2
+[websitewebhost]
+192.x.x.1
+192.x.x.2
+[websitedbname]
+websitedb
+[websiteport]
+3306
+[websitedbuser]
+websitesql
+[websitedbpassword]
+7xURmwT9yeCC@@MhQXmq2d
+[websiterootpassword]
+Dm@@I0R6gTMflmtz62l4WN
+[websitesql]
+/home/ubuntu/websitedb_20210309.sql

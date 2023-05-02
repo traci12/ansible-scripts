@@ -1,0 +1,43 @@
+upstream backend {
+    server 10.x.x.1:9000;
+}
+
+server {
+    access_log /var/log/nginx/staging.website-access-logs.log;
+    error_log /var/log/nginx/staging.website-error-logs.log;
+    server_name {{ domain }};
+
+    location / {
+#        proxy_set_header Host $host;
+#        proxy_set_header X-Real-IP $remote_addr;
+#        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#        proxy_pass http://backend;
+        root /var/www/website/;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_index           index.php;
+        fastcgi_pass            backend;
+        include                 fastcgi_params;
+        fastcgi_param           PATH_INFO       $fastcgi_path_info;
+        fastcgi_param           SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/example1.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/example1.com/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+server {
+    if ($host = example1.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    server_name example1.com;
+    return 404; # managed by Certbot
+
+
+}

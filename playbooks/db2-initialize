@@ -1,0 +1,77 @@
+- name: Initialize website2
+  hosts: website2
+  become: yes
+  become_user: root
+  vars:
+   web: "{{ groups['website2'] }}"
+   db: "{{ groups['db'] }}"
+   db_root_password: "{{ groups['rootpassword'] }}"  
+   dbname: "{{ groups['dbname'] }}"
+   dbuser: "{{ groups['dbuser'] }}"
+   dbpassword: "{{ groups['dbpassword'] }}"
+   dbsql: "{{ groups['sql'] }}"
+  tasks:
+   - name: start up the db service  
+     shell: "service postgresql start"  
+   - name: ensure db is enabled to run on startup  
+     service: name=postgresql state=started enabled=true
+   # psycopg2 needed for user, db creation
+   - pip:
+      name: psycopg2-binary
+   - name: update db root password for all root accounts
+     become: true
+     become_user: postgres
+     postgresql_user:  
+      user=root  
+      password='{{ ",".join(db_root_password) }}'
+      login_user=postgres
+      login_password='{{ ",".join(db_root_password) }}'4
+     vars:
+      ansible_ssh_pipelining: true
+   - name: Delete database
+     become: true
+     become_user: postgres
+     postgresql_db:
+      name={{ ",".join(dbname) }}
+      state=absent
+      login_user=postgres
+      login_password='{{ ",".join(db_root_password) }}'
+     vars:
+      ansible_ssh_pipelining: true
+   - name: create a new database  
+     become: true
+     become_user: postgres
+     postgresql_db: 
+      name={{ ",".join(dbname) }}
+      state=present 
+      login_user=postgres
+      login_password='{{ ",".join(db_root_password) }}'
+     vars:
+      ansible_ssh_pipelining: true
+   - name: create new postgresql user
+     become: true
+     become_user: postgres
+     postgresql_user:
+      db='{{ ",".join(dbname) }}'
+      user='{{ ",".join(dbuser) }}'
+      password='{{ ",".join(dbpassword) }}'
+      login_user=postgres
+      login_password='{{ ",".join(db_root_password) }}'
+      priv="ALL"
+     vars:
+      ansible_ssh_pipelining: true
+#   - name: insert data into database  
+#     become: true
+#     become_user: postgres
+#     postgresql_db: 
+#      name={{ ",".join(dbname) }} 
+#      state=restore 
+#      target={{ ",".join(dbsql) }}
+#      login_user=postgres 
+#      login_password='{{ ",".join(db_root_password) }}'
+#     vars:
+#      ansible_ssh_pipelining: true
+   - name: Restart postgresql
+     service:
+      name: postgresql
+      state: restarted
