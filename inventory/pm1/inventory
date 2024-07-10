@@ -1,0 +1,13 @@
+[webservers]
+68.183.184.52 domain=api1-qojxtfoxzr4fgw1ojncy.xyz ansible_user=root
+
+[webservers:vars]
+ansible_python_interpreter=/usr/bin/python3
+mysql_root_password="ZjLVYQh@59EaA0c0y@rHBo"
+mysql_suitecrm_db="pm1"
+mysql_suitecrm_user="pm1sql"
+mysql_suitecrm_password="bG1@ZRStVBwh2wA4@Tsgbhlj"
+suitecrm_version="8.2.2"
+suitecrm_url="https://suitecrm.com/files/162/SuiteCRM-8-2/659/SuiteCRM-8.2.2.zip"
+web_root="/var/www/pm1"
+venv_path="/opt/venv"

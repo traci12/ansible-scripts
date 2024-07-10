@@ -3,14 +3,6 @@
   hosts: webservers
   become: yes
   become_user: root
-  vars:
-    mysql_root_password: "{{ groups['websiterootpassword'] }}"
-    mysql_suitecrm_db: "{{ groups['websitewebhost'] }}"
-    mysql_suitecrm_user: "{{ groups['websitedbuser'] }}"
-    mysql_suitecrm_password: "{{ groups['websitedbpassword'] }}"
-    suitecrm_version: "8.2.2"
-    suitecrm_url: "https://suitecrm.com/files/162/SuiteCRM-8-2/659/SuiteCRM-8.2.2.zip"
-    web_root: "/var/www/pm1"
   tasks:
     - name: Update and upgrade apt packages
       apt:
@@ -30,7 +22,18 @@
           - php-zip
           - unzip
           - curl
+          - python3
+          - python3-pip
+          - python3-venv
         state: present
+
+    - name: Create a virtual environment
+      command: python3 -m venv {{ venv_path }}
+      args:
+        creates: "{{ venv_path }}"
+
+    - name: Install MySQL Python client library in virtual environment
+      command: "{{ venv_path }}/bin/pip install PyMySQL"
 
     - name: Start and enable Nginx
       service:
