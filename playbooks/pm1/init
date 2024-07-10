@@ -44,18 +44,27 @@
         state: started
         enabled: yes
 
-    - name: Secure MySQL installation
-      mysql_secure_installation:
-        login_user: root
-        login_password: ''
-        root_password: "{{ mysql_root_password }}"
-        change_root_password: yes
-        remove_anonymous_users: yes
-        disallow_root_login_remotely: yes
-        remove_test_db: yes
-        state: present
+    - name: Secure MySQL installation - Set root password
+      shell: |
+        mysql --user=root --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH 'mysql_native_password' BY '{{ mysql_root_password }}';"
 
-    - name: Create SuiteCRM database and user
+    - name: Secure MySQL installation - Remove anonymous users
+      shell: |
+        mysql --user=root --password={{ mysql_root_password }} --execute="DELETE FROM mysql.user WHERE User='';"
+
+    - name: Secure MySQL installation - Disallow root login remotely
+      shell: |
+        mysql --user=root --password={{ mysql_root_password }} --execute="DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+
+    - name: Secure MySQL installation - Remove test database
+      shell: |
+        mysql --user=root --password={{ mysql_root_password }} --execute="DROP DATABASE IF EXISTS test; DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+
+    - name: Secure MySQL installation - Reload privilege tables
+      shell: |
+        mysql --user=root --password={{ mysql_root_password }} --execute="FLUSH PRIVILEGES;"
+
+    - name: Create SuiteCRM database
       mysql_db:
         name: "{{ mysql_suitecrm_db }}"
         state: present
@@ -79,8 +88,9 @@
         remote_src: yes
 
     - name: Move SuiteCRM to web root
-      command: mv /tmp/SuiteCRM-{{ suitecrm_version }}/* {{ web_root }}
-      creates: "{{ web_root }}/index.php"
+      shell: mv /tmp/SuiteCRM-{{ suitecrm_version }}/* {{ web_root }}
+      args:
+        creates: "{{ web_root }}/index.php"
 
     - name: Set permissions on web root
       file:
@@ -98,7 +108,7 @@
         block: |
           server {
               listen 80;
-              server_name {{ domain }};
+              server_name "{{ domain }}";
               root {{ web_root }};
               index index.php index.html index.htm;
 
@@ -144,14 +154,21 @@
         name: nginx
         state: reloaded
 
-    - name: Install Composer
-      command: curl -sS https://getcomposer.org/installer | php
+    - name: Install Composer if not already installed
+      shell: curl -sS https://getcomposer.org/installer | php
       args:
         chdir: /usr/local/bin
-      creates: /usr/local/bin/composer
+      when: ansible_stat.stat.exists == False
+      register: composer_installed
+      changed_when: composer_installed.stdout.find('Composer') != -1
+
+    - name: Check if composer.phar exists
+      stat:
+        path: /usr/local/bin/composer.phar
+      register: ansible_stat
 
     - name: Run Composer install
-      command: php composer.phar install --no-dev
+      shell: php composer.phar install --no-dev
       args:
         chdir: "{{ web_root }}"
       environment:
