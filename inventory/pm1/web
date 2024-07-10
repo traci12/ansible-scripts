@@ -1,2 +1,2 @@
-[web]
+[webservers]
 68.183.184.52 domain=api1-qojxtfoxzr4fgw1ojncy.xyz ansible_user=root

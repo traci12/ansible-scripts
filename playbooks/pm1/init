@@ -98,7 +98,7 @@
         block: |
           server {
               listen 80;
-              server_name your_domain_or_ip;
+              server_name {{ domain }};
               root {{ web_root }};
               index index.php index.html index.htm;
 
