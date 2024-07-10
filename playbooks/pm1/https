@@ -1,0 +1,34 @@
+---
+- name: SSL Letsencrypt on Ubuntu 24 with Nginx
+  hosts: webservers
+  become: yes
+  become_user: root
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+
+    - name: Obtain SSL certificates from Let's Encrypt
+      command: certbot --nginx -d {{ domain }} --non-interactive --agree-tos --email {{ email_address }}
+      register: certbot_result
+      ignore_errors: yes
+
+    - name: Fail if certbot command fails
+      fail:
+        msg: "Certbot command failed"
+      when: certbot_result.rc != 0
+
+    - name: Configure Nginx for HTTPS
+      blockinfile:
+        path: /etc/nginx/sites-available/suitecrm
+        marker: "; ANSIBLE MANAGED BLOCK - HTTPS CONFIGURATION"
+        block: |
+          server {

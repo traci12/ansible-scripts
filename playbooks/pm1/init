@@ -25,6 +25,9 @@
           - rsync
           - php-gd
           - php-ldap
+          - php-intl
+          - php-soap
+          - php-imap
           - python3
           - python3-pip
           - python3-venv
@@ -134,7 +137,7 @@
           server {
               listen 80;
               server_name {{ domain }};
-              root {{ web_root }};
+              root {{ web_root }}/public;
               index index.php index.html index.htm;
 
               location / {
@@ -198,3 +201,34 @@
       environment:
         COMPOSER_ALLOW_SUPERUSER: "1"
         COMPOSER_HOME: "/root/.composer"
+
+    - name: Determine installed PHP version
+      shell: php -r 'echo PHP_VERSION;'
+      register: php_version_raw
+
+    - name: Set PHP version
+      set_fact:
+        php_version: "{{ php_version_raw.stdout | regex_replace('^([0-9]+\\.[0-9]+).*', '\\1') }}"
+
+    - name: Increase PHP file upload size
+      blockinfile:
+        path: /etc/php/{{ php_version }}/fpm/php.ini
+        marker: "; ANSIBLE MANAGED BLOCK - FILE UPLOAD SIZE"
+        block: |
+          upload_max_filesize = 50M
+          post_max_size = 50M
+          memory_limit = 256M
+
+    - name: Increase PHP file upload size for CLI
+      blockinfile:
+        path: /etc/php/{{ php_version }}/cli/php.ini
+        marker: "; ANSIBLE MANAGED BLOCK - FILE UPLOAD SIZE"
+        block: |
+          upload_max_filesize = 50M
+          post_max_size = 50M
+          memory_limit = 256M
+
+    - name: Restart PHP-FPM
+      service:
+        name: php{{ php_version }}-fpm
+        state: restarted
