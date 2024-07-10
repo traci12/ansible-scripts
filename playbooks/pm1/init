@@ -1,0 +1,159 @@
+---
+- name: Install SuiteCRM on Ubuntu 24 with Nginx
+  hosts: webservers
+  become: yes
+  become_user: root
+  vars:
+    mysql_root_password: "{{ groups['websiterootpassword'] }}"
+    mysql_suitecrm_db: "{{ groups['websitewebhost'] }}"
+    mysql_suitecrm_user: "{{ groups['websitedbuser'] }}"
+    mysql_suitecrm_password: "{{ groups['websitedbpassword'] }}"
+    suitecrm_version: "8.2.2"
+    suitecrm_url: "https://suitecrm.com/files/162/SuiteCRM-8-2/659/SuiteCRM-8.2.2.zip"
+    web_root: "/var/www/pm1"
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - nginx
+          - mysql-server
+          - php-fpm
+          - php-mysql
+          - php-xml
+          - php-mbstring
+          - php-curl
+          - php-zip
+          - unzip
+          - curl
+        state: present
+
+    - name: Start and enable Nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Start and enable MySQL
+      service:
+        name: mysql
+        state: started
+        enabled: yes
+
+    - name: Secure MySQL installation
+      mysql_secure_installation:
+        login_user: root
+        login_password: ''
+        root_password: "{{ mysql_root_password }}"
+        change_root_password: yes
+        remove_anonymous_users: yes
+        disallow_root_login_remotely: yes
+        remove_test_db: yes
+        state: present
+
+    - name: Create SuiteCRM database and user
+      mysql_db:
+        name: "{{ mysql_suitecrm_db }}"
+        state: present
+
+    - name: Create SuiteCRM user
+      mysql_user:
+        name: "{{ mysql_suitecrm_user }}"
+        password: "{{ mysql_suitecrm_password }}"
+        priv: "{{ mysql_suitecrm_db }}.*:ALL"
+        state: present
+
+    - name: Download SuiteCRM
+      get_url:
+        url: "{{ suitecrm_url }}"
+        dest: /tmp/suitecrm.zip
+
+    - name: Unzip SuiteCRM
+      unarchive:
+        src: /tmp/suitecrm.zip
+        dest: /tmp
+        remote_src: yes
+
+    - name: Move SuiteCRM to web root
+      command: mv /tmp/SuiteCRM-{{ suitecrm_version }}/* {{ web_root }}
+      creates: "{{ web_root }}/index.php"
+
+    - name: Set permissions on web root
+      file:
+        path: "{{ web_root }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+        recurse: yes
+
+    - name: Configure Nginx for SuiteCRM
+      blockinfile:
+        path: /etc/nginx/sites-available/suitecrm
+        create: yes
+        block: |
+          server {
+              listen 80;
+              server_name your_domain_or_ip;
+              root {{ web_root }};
+              index index.php index.html index.htm;
+
+              location / {
+                  try_files $uri $uri/ /index.php?$query_string;
+              }
+
+              location ~ \.php$ {
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:/var/run/php/php-fpm.sock;
+                  fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                  include fastcgi_params;
+              }
+
+              location ~ /\.ht {
+                  deny all;
+              }
+          }
+
+    - name: Enable SuiteCRM site
+      file:
+        src: /etc/nginx/sites-available/suitecrm
+        dest: /etc/nginx/sites-enabled/suitecrm
+        state: link
+
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Test Nginx configuration
+      command: nginx -t
+      register: nginx_test
+      ignore_errors: yes
+
+    - name: Fail if Nginx configuration test fails
+      fail:
+        msg: "Nginx configuration test failed"
+      when: nginx_test.rc != 0
+
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Install Composer
+      command: curl -sS https://getcomposer.org/installer | php
+      args:
+        chdir: /usr/local/bin
+      creates: /usr/local/bin/composer
+
+    - name: Run Composer install
+      command: php composer.phar install --no-dev
+      args:
+        chdir: "{{ web_root }}"
+      environment:
+        COMPOSER_ALLOW_SUPERUSER: "1"
+        COMPOSER_HOME: "/root/.composer"
